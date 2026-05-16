@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>お絵描きアプリ</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #1a1a2e;
+      font-family: 'Segoe UI', sans-serif;
+      color: #eee;
+      min-height: 100vh;
+      padding: 16px;
+    }
+
+    h1 {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+      color: #c9d1d9;
+    }
+
+    /* ===============================
+       ツールバー全体
+    =============================== */
+    #toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 10px;
+      padding: 10px 14px;
+      margin-bottom: 10px;
+    }
+
+    .toolbar-section {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .toolbar-label {
+      font-size: 11px;
+      color: #888;
+      margin-right: 2px;
+      white-space: nowrap;
+    }
+
+    /* ツールボタン（ペン・消しゴム・Undo・クリア） */
+    .tool-btn {
+      padding: 5px 12px;
+      border: 1px solid #0f3460;
+      border-radius: 6px;
+      background: #1a1a2e;
+      color: #ccc;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      white-space: nowrap;
+    }
+    .tool-btn:hover { background: #0f3460; }
+    .tool-btn.active {
+      background: #e94560;
+      border-color: #e94560;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    /* カラーパレット */
+    #palette {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .color-swatch {
+      width: 22px;
+      height: 22px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.1s, border-color 0.1s;
+    }
+    .color-swatch:hover { transform: scale(1.2); }
+    .color-swatch.active { border-color: #fff; transform: scale(1.15); }
+
+    /* ブラシサイズ */
+    input[type="range"] {
+      width: 80px;
+      accent-color: #e94560;
+    }
+
+    #size-label {
+      font-size: 13px;
+      min-width: 20px;
+      color: #aaa;
+    }
+
+    /* ===============================
+       レイヤーバー
+    =============================== */
+    #layer-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 10px;
+      padding: 8px 14px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .layer-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border: 1px solid #0f3460;
+      border-radius: 6px;
+      background: #1a1a2e;
+      color: #aaa;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .layer-btn:hover { background: #0f3460; }
+    .layer-btn.active {
+      border-color: #e94560;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .layer-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .eye-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #888;
+      font-size: 14px;
+      padding: 0 2px;
+      line-height: 1;
+    }
+    .eye-btn:hover { color: #fff; }
+
+    .layer-btn.hidden-layer { opacity: 0.4; }
+
+    /* ===============================
+       キャンバスエリア
+    =============================== */
+    #canvas-wrap {
+      position: relative;
+      width: 800px;
+      height: 500px;
+      border-radius: 10px;
+      overflow: hidden;
+      /* 透明部分を示す市松模様 */
+      background-color: #fff;
+      background-image:
+        linear-gradient(45deg, #ccc 25%, transparent 25%),
+        linear-gradient(-45deg, #ccc 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #ccc 75%),
+        linear-gradient(-45deg, transparent 75%, #ccc 75%);
+      background-size: 16px 16px;
+      background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+      border: 1px solid #0f3460;
+    }
+
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 800px;
+      height: 500px;
+      cursor: crosshair;
+      touch-action: none;
+    }
+
+    /* ===============================
+       ステータスバー
+    =============================== */
+    #status-bar {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #666;
+      display: flex;
+      gap: 16px;
+    }
+
+    #status-bar span { color: #e94560; font-weight: 500; }
+  </style>
+</head>
+<body>
+
+  <h1>🎨 お絵描きアプリ</h1>
+
+  <!-- ===============================
+       ツールバー
+  =============================== -->
+  <div id="toolbar">
+
+    <!-- ペン・消しゴム -->
+    <div class="toolbar-section">
+      <span class="toolbar-label">ツール</span>
+      <button class="tool-btn active" id="btn-pen" onclick="setTool('pen')">
+        ✏️ ペン
+      </button>
+      <button class="tool-btn" id="btn-eraser" onclick="setTool('eraser')">
+        🧹 消しゴム
+      </button>
+    </div>
+
+    <!-- 16色パレット -->
+    <div class="toolbar-section">
+      <span class="toolbar-label">色</span>
+      <div id="palette"></div>
+    </div>
+
+    <!-- ブラシサイズ -->
+    <div class="toolbar-section">
+      <span class="toolbar-label">太さ</span>
+      <input type="range" id="size-slider" min="1" max="40" value="4"
+        oninput="document.getElementById('size-label').textContent = this.value">
+      <span id="size-label">4</span>
+    </div>
+
+    <!-- Undo・クリア -->
+    <div class="toolbar-section" style="margin-left: auto;">
+      <button class="tool-btn" onclick="undo()">↩ Undo</button>
+      <button class="tool-btn" onclick="clearActive()">🗑 クリア</button>
+    </div>
+
+  </div>
+
+  <!-- ===============================
+       レイヤーバー
+  =============================== -->
+  <div id="layer-bar">
+    <span class="toolbar-label">レイヤー選択 →</span>
+    <!-- レイヤーボタンはJSで自動生成 -->
+  </div>
+
+  <!-- ===============================
+       キャンバス（5枚重ね）
+  =============================== -->
+  <div id="canvas-wrap">
+    <!-- canvas要素はJSで自動生成 -->
+  </div>
+
+  <!-- ステータスバー -->
+  <div id="status-bar">
+    <div>アクティブ: <span id="st-layer">レイヤー1</span></div>
+    <div>ツール: <span id="st-tool">ペン</span></div>
+    <div>太さ: <span id="st-size">4</span></div>
+  </div>
+
+
+  <script>
+    // ===============================
+    // 定数・設定
+    // ===============================
+
+    const LAYER_COUNT = 5;
+    const CANVAS_W = 800;
+    const CANVAS_H = 500;
+    const MAX_HISTORY = 20; // レイヤーごとの最大Undo履歴件数
+
+    // レイヤーごとの色（ドット表示用）
+    const LAYER_COLORS = [
+      '#e94560', // レイヤー1：赤
+      '#f5a623', // レイヤー2：オレンジ
+      '#7ed321', // レイヤー3：緑
+      '#4a90e2', // レイヤー4：青
+      '#bd10e0'  // レイヤー5：紫
+    ];
+
+    // 基本16色パレット
+    const PALETTE_COLORS = [
+      '#000000', // 黒
+      '#FFFFFF', // 白
+      '#FF0000', // 赤
+      '#00FF00', // 緑
+      '#0000FF', // 青
+      '#FFFF00', // 黄
+      '#FF00FF', // マゼンタ
+      '#00FFFF', // シアン
+      '#808080', // グレー
+      '#C0C0C0', // シルバー
+      '#800000', // マルーン
+      '#008000', // ダークグリーン
+      '#000080', // ネイビー
+      '#808000', // オリーブ
+      '#800080', // パープル
+      '#008080'  // ティール
+    ];
+
+
+    // ===============================
+    // 状態変数
+    // ===============================
+
+    const canvases = []; // 各レイヤーの canvas 要素
+    const ctxs = [];     // 各レイヤーの描画コンテキスト
+    const history = [];  // Undo用履歴 history[レイヤー番号] = [スナップショット, ...]
+    const visible = [];  // 各レイヤーの表示状態
+
+    let activeLayer = 0;       // 現在選択中のレイヤー番号（0始まり）
+    let tool = 'pen';          // 現在のツール ('pen' or 'eraser')
+    let currentColor = '#000000'; // 現在の描画色
+    let isDrawing = false;     // マウスが押されているか
+    let lastX = 0;             // 直前のX座標
+    let lastY = 0;             // 直前のY座標
+
+
+    // ===============================
+    // 初期化：パレット生成
+    // ===============================
+
+    const paletteEl = document.getElementById('palette');
+
+    PALETTE_COLORS.forEach(function(c, idx) {
+      const swatch = document.createElement('div');
+      swatch.className = 'color-swatch' + (idx === 0 ? ' active' : '');
+      swatch.style.background = c;
+      // 白は枠線を付けて見えるようにする
+      if (c === '#FFFFFF') swatch.style.border = '2px solid #555';
+      swatch.title = c;
+      swatch.onclick = function() {
+        setColor(c, swatch);
+      };
+      paletteEl.appendChild(swatch);
+    });
+
+
+    // ===============================
+    // 初期化：レイヤー生成（canvas × 5 枚 + ボタン）
+    // ===============================
+
+    const canvasWrap = document.getElementById('canvas-wrap');
+    const layerBar = document.getElementById('layer-bar');
+
+    for (let i = 0; i < LAYER_COUNT; i++) {
+
+      // --- canvas 要素を生成して重ねる ---
+      const cv = document.createElement('canvas');
+      cv.width = CANVAS_W;
+      cv.height = CANVAS_H;
+      cv.style.zIndex = i + 1;
+      // レイヤー1（一番下）だけ白背景、他は透明
+      cv.style.background = i === 0 ? '#ffffff' : 'transparent';
+      canvasWrap.appendChild(cv);
+      canvases.push(cv);
+
+      // コンテキスト取得・初期設定
+      const ctx = cv.getContext('2d');
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctxs.push(ctx);
+
+      // 履歴・表示状態の初期化
+      history.push([]);
+      visible.push(true);
+
+      // --- レイヤーボタンを生成 ---
+      const btn = document.createElement('button');
+      btn.className = 'layer-btn' + (i === 0 ? ' active' : '');
+      btn.id = 'layer-btn-' + i;
+      btn.innerHTML =
+        `<span class="layer-dot" style="background:${LAYER_COLORS[i]};"></span>` +
+        `レイヤー${i + 1}` +
+        `<button class="eye-btn" id="eye-btn-${i}"
+          onclick="toggleVisible(event, ${i})"
+          aria-label="レイヤー${i + 1} 表示切替">👁</button>`;
+      btn.onclick = function() { selectLayer(i); };
+      layerBar.appendChild(btn);
+
+      // --- イベントリスナーを各 canvas に登録 ---
+      cv.addEventListener('mousedown', onMouseDown);
+      cv.addEventListener('mousemove', onMouseMove);
+      cv.addEventListener('mouseup', onMouseUp);
+      cv.addEventListener('mouseleave', onMouseUp);
+
+      // タッチ操作対応
+      cv.addEventListener('touchstart', onTouchStart, { passive: false });
+      cv.addEventListener('touchmove', onTouchMove, { passive: false });
+      cv.addEventListener('touchend', onMouseUp);
+    }
+
+    // 最初はレイヤー1を選択状態にする
+    selectLayer(0);
+
+
+    // ===============================
+    // レイヤー操作
+    // ===============================
+
+    // レイヤーを切り替える
+    function selectLayer(n) {
+      activeLayer = n;
+      for (let i = 0; i < LAYER_COUNT; i++) {
+        // 選択中のレイヤーだけマウス操作を受け付ける
+        canvases[i].style.pointerEvents = i === n ? 'auto' : 'none';
+        document.getElementById('layer-btn-' + i)
+          .classList.toggle('active', i === n);
+      }
+      document.getElementById('st-layer').textContent = 'レイヤー' + (n + 1);
+    }
+
+    // 目のボタンで表示/非表示を切り替える
+    function toggleVisible(e, n) {
+      e.stopPropagation(); // レイヤー選択ボタンへの伝播を止める
+      visible[n] = !visible[n];
+      canvases[n].style.display = visible[n] ? 'block' : 'none';
+      document.getElementById('eye-btn-' + n).textContent
+        = visible[n] ? '👁' : '🚫';
+      document.getElementById('layer-btn-' + n)
+        .classList.toggle('hidden-layer', !visible[n]);
+    }
+
+
+    // ===============================
+    // Undo 機能
+    // ===============================
+
+    // 現在のレイヤーの状態をスナップショットとして保存する
+    function saveHistory() {
+      const snapshot = ctxs[activeLayer]
+        .getImageData(0, 0, CANVAS_W, CANVAS_H);
+      history[activeLayer].push(snapshot);
+
+      // 最大件数を超えたら古いものを削除（メモリ節約）
+      if (history[activeLayer].length > MAX_HISTORY) {
+        history[activeLayer].shift();
+      }
+    }
+
+    // 1つ前の状態に戻す
+    function undo() {
+      if (history[activeLayer].length === 0) {
+        return; // 履歴がなければ何もしない
+      }
+      const snapshot = history[activeLayer].pop();
+      ctxs[activeLayer].putImageData(snapshot, 0, 0);
+    }
+
+
+    // ===============================
+    // ツール・色・サイズの切り替え
+    // ===============================
+
+    function setTool(t) {
+      tool = t;
+      document.getElementById('btn-pen')
+        .classList.toggle('active', t === 'pen');
+      document.getElementById('btn-eraser')
+        .classList.toggle('active', t === 'eraser');
+      document.getElementById('st-tool')
+        .textContent = t === 'pen' ? 'ペン' : '消しゴム';
+    }
+
+    function setColor(c, swatchEl) {
+      currentColor = c;
+      // 全スウォッチの active を外してクリックしたものに付ける
+      document.querySelectorAll('.color-swatch')
+        .forEach(function(s) { s.classList.remove('active'); });
+      if (swatchEl) swatchEl.classList.add('active');
+      // 色を選んだらペンモードに戻す
+      if (tool === 'eraser') setTool('pen');
+    }
+
+    // ブラシサイズのステータス表示を更新
+    document.getElementById('size-slider').addEventListener('input', function() {
+      document.getElementById('st-size').textContent = this.value;
+    });
+
+    // アクティブレイヤーの内容だけクリア
+    function clearActive() {
+      saveHistory(); // クリア前に履歴を保存しておく（Undoで戻せる）
+      ctxs[activeLayer].clearRect(0, 0, CANVAS_W, CANVAS_H);
+    }
+
+
+    // ===============================
+    // 座標取得
+    // ===============================
+
+    // マウスの座標をキャンバス内の座標に変換する
+    function getPos(e) {
+      const rect = canvases[activeLayer].getBoundingClientRect();
+      // canvas の表示サイズと実際のピクセルサイズが異なる場合に備えてスケール補正
+      const scaleX = CANVAS_W / rect.width;
+      const scaleY = CANVAS_H / rect.height;
+      return {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY
+      };
+    }
+
+    // タッチの座標をキャンバス内の座標に変換する
+    function getTouchPos(e) {
+      const rect = canvases[activeLayer].getBoundingClientRect();
+      const scaleX = CANVAS_W / rect.width;
+      const scaleY = CANVAS_H / rect.height;
+      return {
+        x: (e.touches[0].clientX - rect.left) * scaleX,
+        y: (e.touches[0].clientY - rect.top) * scaleY
+      };
+    }
+
+
+    // ===============================
+    // 描画処理（共通）
+    // ===============================
+
+    // 実際に線を引く処理（マウス・タッチ共通）
+    function drawLine(x, y) {
+      const size = parseInt(document.getElementById('size-slider').value);
+      const ctx = ctxs[activeLayer];
+
+      ctx.beginPath();
+      ctx.moveTo(lastX, lastY); // 直前の座標から
+      ctx.lineTo(x, y);         // 今の座標まで線を引く
+
+      if (tool === 'eraser') {
+        // 消しゴム：そのレイヤーの描画だけ透明にする
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.strokeStyle = 'rgba(0,0,0,1)';
+        ctx.lineWidth = size * 3; // 消しゴムは少し太め
+      } else {
+        // ペン：選んだ色と太さで描く
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = currentColor;
+        ctx.lineWidth = size;
+      }
+
+      ctx.stroke();
+
+      // 座標を更新
+      lastX = x;
+      lastY = y;
+    }
+
+
+    // ===============================
+    // マウスイベント
+    // ===============================
+
+    function onMouseDown(e) {
+      saveHistory(); // 描き始める前に状態を保存（Undo用）
+      isDrawing = true;
+      const p = getPos(e);
+      lastX = p.x;
+      lastY = p.y;
+    }
+
+    function onMouseMove(e) {
+      if (!isDrawing) return; // マウスが押されていなければ無視
+      const p = getPos(e);
+      drawLine(p.x, p.y);
+    }
+
+    function onMouseUp() {
+      isDrawing = false;
+      // 消しゴムモードを解除（次の操作に影響しないように）
+      ctxs[activeLayer].globalCompositeOperation = 'source-over';
+    }
+
+
+    // ===============================
+    // タッチイベント（スマホ対応）
+    // ===============================
+
+    function onTouchStart(e) {
+      e.preventDefault(); // スクロールを防ぐ
+      saveHistory();
+      isDrawing = true;
+      const p = getTouchPos(e);
+      lastX = p.x;
+      lastY = p.y;
+    }
+
+    function onTouchMove(e) {
+      e.preventDefault();
+      if (!isDrawing) return;
+      const p = getTouchPos(e);
+      drawLine(p.x, p.y);
+    }
+
+
+    // ===============================
+    // キーボードショートカット
+    // ===============================
+
+    document.addEventListener('keydown', function(e) {
+      // Ctrl+Z（Mac は Cmd+Z）で Undo
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        undo();
+      }
+      // P キーでペン
+      if (e.key === 'p' || e.key === 'P') setTool('pen');
+      // E キーで消しゴム
+      if (e.key === 'e' || e.key === 'E') setTool('eraser');
+    });
+
+  </script>
+  <!-- Socket.io の読み込み（サーバーが自動で提供してくれる） -->
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+  // ===============================
+  // Socket.io の接続
+  // ===============================
+  const socket = io(); // サーバーに接続する
+
+  // ===============================
+  // 描いたデータを送信する
+  // ===============================
+  // 既存の drawLine 関数の中に以下を追加する
+  // （他の人から受け取った描画のときは送信しない）
+  let isRemote = false; // 今描いているのが他の人のデータかどうか
+
+  const _drawLine = drawLine; // 元の drawLine を保存
+  drawLine = function(x, y) {
+    _drawLine(x, y); // 元の描画処理を実行
+
+    if (!isRemote) {
+      // 自分が描いたときだけサーバーに送信
+      const size = parseInt(document.getElementById('size-slider').value);
+      socket.emit('draw', {
+        fromX: lastX, fromY: lastY,
+        toX: x, toY: y,
+        color: currentColor,
+        size: size,
+        tool: tool,
+        layer: activeLayer
+      });
+    }
+  };
+
+  // ===============================
+  // 他の人の描画データを受け取って描く
+  // ===============================
+  socket.on('draw', (data) => {
+    isRemote = true; // 他の人のデータと印をつける
+
+    // 受け取ったデータで一時的に状態を上書きして描く
+    const prevColor = currentColor;
+    const prevTool = tool;
+    const prevLayer = activeLayer;
+
+    currentColor = data.color;
+    tool = data.tool;
+    activeLayer = data.layer;
+    lastX = data.fromX;
+    lastY = data.fromY;
+
+    drawLine(data.toX, data.toY); // 描画
+
+    // 元の状態に戻す
+    currentColor = prevColor;
+    tool = prevTool;
+    activeLayer = prevLayer;
+
+    isRemote = false;
+  });
+</script>
+</body>
+</html>
